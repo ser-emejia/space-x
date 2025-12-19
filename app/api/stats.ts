@@ -1,9 +1,11 @@
 import { BASE_URL } from "@/app/constants";
 
 import {
+  HistoryLaunchItem,
   GetQuickStatsResponse,
   GetTotalLaunchesPayload,
 } from "@/app/types/stats";
+import { formatHistoryLaunchResponse } from "../helpers/formatHistoryLaunchResponse";
 
 async function getTotalLaunches(
   payload: GetTotalLaunchesPayload
@@ -35,12 +37,12 @@ async function getTotalStarlinks(): Promise<number> {
       `${process.env.NEXT_PUBLIC_SPACEX_API}/starlink/query`,
       {
         method: "POST",
+        next: { revalidate: 86_400 },
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: {},
           options: { limit: 0 },
         }),
-        next: { revalidate: 86400 },
       }
     );
 
@@ -82,5 +84,36 @@ export async function getQuickStats(): Promise<GetQuickStatsResponse> {
       totalFailedLaunches: 0,
       totalStarlinks: 0,
     };
+  }
+}
+
+export async function getHistoryLaunches() {
+  try {
+    const response = await fetch(`${BASE_URL}/launches/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: { upcoming: false },
+        options: {
+          select: {
+            success: 1,
+            date_utc: 1,
+          },
+          pagination: false,
+          sort: { date_utc: "desc" },
+        },
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch history launches");
+
+    const data: { docs: HistoryLaunchItem[] } = await response.json();
+
+    const formattedResponse = formatHistoryLaunchResponse(data.docs);
+
+    return formattedResponse;
+  } catch (error) {
+    console.error("Failed to fetch history launches", error);
+    return [];
   }
 }
